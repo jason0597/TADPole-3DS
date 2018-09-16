@@ -21,6 +21,9 @@ int main() {
 	vector<u8> NK = keyScrambler(KeyY, false);
 	printBytes(NK);
 
+	// https://github.com/knight-ryu12/Seedplanter/blob/master/src/main/java/faith/elguadia/seedplanter/TADPole.java#L44
+	// Possibly most important step for decryption
+
 	while (aptMainLoop()) {
 		hidScanInput();
 		if (hidKeysDown() & KEY_START) break; 

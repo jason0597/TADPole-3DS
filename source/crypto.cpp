@@ -39,7 +39,7 @@ vector<u8> calculateCMAC(vector<u8> key, vector<u8> input) {
         128,
         MBEDTLS_MODE_CBC
     );
-    vector<u8> output(32);
+    vector<u8> output(16);
     mbedtls_cipher_cmac(cipher_info, &key[0], key.size(), &input[0], input.size(), &output[0]);
     return output;
 }
