@@ -5,7 +5,7 @@
 #include "uint128_t.h"
 #include "crypto.h"
 
-using std::vector;
+using std::vector, std::array;
 
 uint128_t leftRotate128(uint128_t n, unsigned int d) {
    return (n << d) | (n >> (128 - d));
@@ -15,7 +15,7 @@ uint128_t rightRotate128(uint128_t n, unsigned int d) {
    return (n >> d) | (n << (128 - d));
 }
 
-vector<u8> encryptAES(vector<u8> plaintext, vector<u8> key, vector<u8> iv) {
+vector<u8> encryptAES(vector<u8> &plaintext, array<u8, 16> &key, array<u8, 16> &iv) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
 	mbedtls_aes_setkey_enc(&curctx, &key[0], 128);
@@ -24,7 +24,7 @@ vector<u8> encryptAES(vector<u8> plaintext, vector<u8> key, vector<u8> iv) {
 	return output;
 }
 
-vector<u8> decryptAES(vector<u8> ciphertext, vector<u8> key, vector<u8> iv) {
+vector<u8> decryptAES(vector<u8> &ciphertext, array<u8, 16> &key, array<u8, 16> &iv) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
 	mbedtls_aes_setkey_enc(&curctx, &key[0], 128);
@@ -33,7 +33,7 @@ vector<u8> decryptAES(vector<u8> ciphertext, vector<u8> key, vector<u8> iv) {
 	return output;
 }
 
-vector<u8> calculateCMAC(vector<u8> key, vector<u8> input) {
+vector<u8> calculateCMAC(vector<u8> &input, array<u8, 16> &key) {
     const mbedtls_cipher_info_t* cipher_info = mbedtls_cipher_info_from_values(
         MBEDTLS_CIPHER_ID_AES,
         128,
@@ -44,7 +44,7 @@ vector<u8> calculateCMAC(vector<u8> key, vector<u8> input) {
     return output;
 }
 
-vector<u8> keyScrambler(uint128_t KeyY, bool cmacYN) {
+array<u8, 16> keyScrambler(uint128_t KeyY, bool cmacYN) {
 	uint128_t C(0x1FF9E9AAC5FE0408, 0x024591DC5D52768A);
 	uint128_t KeyX(0x6FBB01F872CAF9C0, 0x1834EEC04065EE53);
 	uint128_t CMAC_KeyX(0xB529221CDDB5DB5A, 0x1BF26EFF2041E875);
@@ -59,7 +59,7 @@ vector<u8> keyScrambler(uint128_t KeyY, bool cmacYN) {
 	u64 lowerNK = NormalKey.lower();
 	u64 upperNK = NormalKey.upper();
 
-	vector<u8> NKBytes(16);
+	array<u8, 16> NKBytes;
 
 	for (int i = 0; i < 8; i++)
     	NKBytes[7 - i] = (upperNK >> (i * 8));
