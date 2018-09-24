@@ -4,6 +4,7 @@
 #include <fstream>
 #include "uint128_t.h"
 #include "crypto.h"
+#include "tadpole.h"
 
 array<u8, 16> normalKey;
 vector<u8> dsiwareBin;
@@ -47,6 +48,12 @@ int main() {
 
 	// https://github.com/knight-ryu12/Seedplanter/blob/master/src/main/java/faith/elguadia/seedplanter/TADPole.java#L44
 	// Possibly most important step for decryption
+
+	vector<u8> decrypted = getDump(0, 0x4000);
+	cout << std::hex << (u16)decrypted[0] << std::endl;
+
+	//array<u8, 32> hash = calculateSha256(decrypted);
+	//PRINTBYTES(hash);
 
 	while (aptMainLoop()) {
 		hidScanInput();
