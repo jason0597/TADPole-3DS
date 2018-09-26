@@ -24,6 +24,12 @@ Crypto       // handles raw crypto actions, generating CMAC, encrypt/decrypt, si
 
 using std::vector, std::string, std::cout;
 
+void writeAllBytes(string filename, vector<u8> &filedata) {
+	std::ofstream curfile(filename, std::ios::out | std::ios::binary);
+	curfile.write((char*)&filedata[0], filedata.size());
+	curfile.close();
+}
+
 vector<u8> readAllBytes(string filename) {
 	std::ifstream curfile(filename, std::ios::binary | std::ios::in | std::ios::ate);
 	std::streampos filesize = curfile.tellg();
@@ -36,25 +42,21 @@ vector<u8> readAllBytes(string filename) {
 	return output;
 }
 
-int main() {
-	gfxInitDefault();
-	consoleInit(GFX_TOP, NULL);
-
+void doStuff() {
 	dsiwareBin = readAllBytes("484E4441.bin");
 
 	uint128_t KeyY(0x49812D0400000000, 0xDA12650933D5D500);
 	normalKey = keyScrambler(KeyY, false);
-	PRINTBYTES(normalKey);
-
-	// https://github.com/knight-ryu12/Seedplanter/blob/master/src/main/java/faith/elguadia/seedplanter/TADPole.java#L44
-	// Possibly most important step for decryption
 
 	vector<u8> decrypted = getDump(0, 0x4000);
-	cout << std::hex << (u16)decrypted[0] << std::endl;
+	writeAllBytes("banner.bin", decrypted);
+}
 
-	//array<u8, 32> hash = calculateSha256(decrypted);
-	//PRINTBYTES(hash);
-
+int main() {
+	gfxInitDefault();
+	consoleInit(GFX_TOP, NULL);
+	doStuff();
+	cout << std::endl << "Done!";
 	while (aptMainLoop()) {
 		hidScanInput();
 		if (hidKeysDown() & KEY_START) break; 

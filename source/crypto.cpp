@@ -4,7 +4,12 @@
 #include <mbedtls/cmac.h>
 #include <mbedtls/sha256.h>
 #include "uint128_t.h"
+#include <iostream>
 #include "crypto.h"
+
+using std::cout;
+
+#define PRINTBYTES(bytes) for (u32 i = 0; i < bytes.size(); i++) cout << std::hex << ((bytes[i] < 0x10) ? "0" : "") << (int)bytes[i]; cout << std::dec << std::endl;
 
 using std::vector, std::array;
 
@@ -25,12 +30,13 @@ vector<u8> encryptAES(vector<u8> &plaintext, array<u8, 16> &key, array<u8, 16> &
 	return output;
 }
 
-vector<u8> decryptAES(vector<u8> &ciphertext, u32 offset, u32 size, array<u8, 16> &key, array<u8, 16> &iv) {
+vector<u8> decryptAES(vector<u8> &ciphertext, array<u8, 16> &key, array<u8, 16> &iv, u32 offset = 0, u32 size = 0) {
+	if (size == 0) { size = ciphertext.size(); }
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
 	mbedtls_aes_setkey_dec(&curctx, &key[0], 128);
 
-	vector<u8> output(ciphertext.size());
+	vector<u8> output(size);
 	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_DECRYPT, size, &iv[0], &ciphertext[offset], &output[0]);
 
 	return output;
