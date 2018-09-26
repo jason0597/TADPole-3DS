@@ -28,7 +28,7 @@ vector<u8> encryptAES(vector<u8> &plaintext, array<u8, 16> &key, array<u8, 16> &
 vector<u8> decryptAES(vector<u8> &ciphertext, u32 offset, u32 size, array<u8, 16> &key, array<u8, 16> &iv) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
-	mbedtls_aes_setkey_enc(&curctx, &key[0], 128);
+	mbedtls_aes_setkey_dec(&curctx, &key[0], 128);
 
 	vector<u8> output(ciphertext.size());
 	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_DECRYPT, size, &iv[0], &ciphertext[offset], &output[0]);

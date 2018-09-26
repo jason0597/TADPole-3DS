@@ -40,7 +40,7 @@ int main() {
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
 
-	dsiwareBin = readAllBytes("4B554E56.bin");
+	dsiwareBin = readAllBytes("484E4441.bin");
 
 	uint128_t KeyY(0x49812D0400000000, 0xDA12650933D5D500);
 	normalKey = keyScrambler(KeyY, false);
