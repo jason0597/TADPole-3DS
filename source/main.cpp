@@ -48,8 +48,10 @@ void doStuff() {
 	uint128_t KeyY(0x49812D0400000000, 0xDA12650933D5D500);
 	normalKey = keyScrambler(KeyY, false);
 
-	vector<u8> decrypted = getDump(0, 0x4000);
-	writeAllBytes("banner.bin", decrypted);
+	vector<u8> footer = getDump(0x4130, 0x4E0);
+	writeAllBytes("footer.bin", footer);
+	vector<u8> srl_nds = getDump(0x5190, 0x69BC0);
+	writeAllBytes("srl.nds", srl_nds);
 }
 
 int main() {
