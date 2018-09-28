@@ -60,11 +60,7 @@ array<u8, 16> keyScrambler(uint128_t KeyY, bool cmacYN) {
 	uint128_t KeyX(0x6FBB01F872CAF9C0, 0x1834EEC04065EE53);
 	uint128_t CMAC_KeyX(0xB529221CDDB5DB5A, 0x1BF26EFF2041E875);
 	
-	uint128_t NormalKey;
-	if (cmacYN) 
-		NormalKey = rightRotate128(((leftRotate128(CMAC_KeyX, 2) ^ KeyY) + C), 41);
-	else 
-		NormalKey = rightRotate128(((leftRotate128(KeyX, 2) ^ KeyY) + C), 41);
+	uint128_t NormalKey = rightRotate128(((leftRotate128(cmacYN ? CMAC_KeyX : KeyX, 2) ^ KeyY) + C), 41);
 
 	u64 lowerNK = NormalKey.lower();
 	u64 upperNK = NormalKey.upper();
