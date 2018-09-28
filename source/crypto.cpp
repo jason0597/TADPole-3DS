@@ -4,12 +4,7 @@
 #include <mbedtls/cmac.h>
 #include <mbedtls/sha256.h>
 #include "uint128_t.h"
-#include <iostream>
 #include "crypto.h"
-
-using std::cout;
-
-#define PRINTBYTES(bytes) for (u32 i = 0; i < bytes.size(); i++) cout << std::hex << ((bytes[i] < 0x10) ? "0" : "") << (int)bytes[i]; cout << std::dec << std::endl;
 
 using std::vector, std::array;
 

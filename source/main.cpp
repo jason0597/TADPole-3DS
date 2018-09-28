@@ -2,6 +2,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <cstring> // for memcpy()
 #include "uint128_t.h"
 #include "crypto.h"
 #include "tadpole.h"
@@ -42,11 +43,26 @@ vector<u8> readAllBytes(string filename) {
 	return output;
 }
 
+uint128_t parseMovableSed(vector<u8> movableSed) {
+	array<u8, 0x10> NKBytes;
+	memcpy(&NKBytes[0], &movableSed[0x110], 0x10);
+
+	uint64_t lowerNK = 0, upperNK = 0;
+	for (int i = 0; i < 8; i++)
+		lowerNK |= ((u64)NKBytes[i] << ((7 - i) * 8));
+	for (int i = 7; i < 16; i++)
+		upperNK |= ((u64)NKBytes[i] << ((15 - i) * 8));
+
+	uint128_t output(lowerNK, upperNK);
+	return output;
+}
+
 void doStuff() {
 	dsiwareBin = readAllBytes("484E4441.bin");
+	vector<u8> movableSed = readAllBytes("movable.sed");
 
-	uint128_t KeyY(0x49812D0400000000, 0xDA12650933D5D500);
-	normalKey = keyScrambler(KeyY, false);
+	uint128_t keyY = parseMovableSed(movableSed);
+	normalKey = keyScrambler(keyY, false);
 
 	vector<u8> footer = getDump(0x4130, 0x4E0);
 	writeAllBytes("footer.bin", footer);
