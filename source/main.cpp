@@ -3,11 +3,12 @@
 #include <iostream>
 #include <fstream>
 #include <cstring> // for memcpy()
+#include <cmath> // for abs()
 #include "uint128_t.h"
 #include "crypto.h"
 #include "tadpole.h"
 
-array<u8, 16> normalKey;
+array<u8, 16> normalKey, normalKey_CMAC;
 vector<u8> dsiwareBin;
 
 #define PRINTBYTES(bytes) for (u32 i = 0; i < bytes.size(); i++) cout << std::hex << ((bytes[i] < 0x10) ? "0" : "") << (int)bytes[i]; cout << std::dec << std::endl;
@@ -23,7 +24,24 @@ Crypto       // handles raw crypto actions, generating CMAC, encrypt/decrypt, si
 
 */
 
-using std::vector, std::string, std::cout;
+/*
+
+1) decrypt srl.nds section
+2) inject flipnote
+3) calculate the CMAC of the SHA256 of the new srl.nds and put it at the block metadata
+4) re-encrypt the srl.nds section
+5) decrypt footer.bin section
+6) fix the srl.nds hash, generate a new master hash, put it in the correct spot
+7) insert the CTCert/APCert stuff
+8) sign
+9) calculate the CMAC of the SHA256 of the new footer.bin and put it at the block metadata
+10) re-encrypt
+11) ...
+12) profit!
+
+*/
+
+using std::vector, std::string, std::cout, std::endl;
 
 void writeAllBytes(string filename, vector<u8> &filedata) {
 	std::ofstream curfile(filename, std::ios::out | std::ios::binary);
@@ -59,22 +77,41 @@ uint128_t parseMovableSed(vector<u8> movableSed) {
 
 void doStuff() {
 	dsiwareBin = readAllBytes("484E4441.bin");
-	vector<u8> movableSed = readAllBytes("movable.sed");
-
-	uint128_t keyY = parseMovableSed(movableSed);
+	uint128_t keyY = parseMovableSed(readAllBytes("movable.sed"));
 	normalKey = keyScrambler(keyY, false);
+	normalKey_CMAC = keyScrambler(keyY, true);
 
+	vector<u8> injection = readAllBytes("Ugoku Memo Chou (Japan).nds");
+
+	vector<u8> header = getDump(0x4020, 0xF0);
+
+	// Read the magic value of the header
+	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
+		cout << "DECRYPTION FAILED!!!" << endl;
+	}
 	vector<u8> footer = getDump(0x4130, 0x4E0);
-	writeAllBytes("footer.bin", footer);
-	vector<u8> srl_nds = getDump(0x5190, 0x69BC0);
-	writeAllBytes("srl.nds", srl_nds);
+
+	// Basically, the srl.nds of DS Download play is right at the end of the TAD container
+	// Because we don't care about what it contains, we can overwrite it directly with our new
+	// flipnote srl.nds straight off the bat, without having to do any decryption
+	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
+	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
+	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
+	array<u8, 16> allzero = array<u8, 16>();
+	vector<u8> encrypted_srl_nds = encryptAES(injection, normalKey, allzero);
+	memcpy(&dsiwareBin[0x5190], &encrypted_srl_nds[0], encrypted_srl_nds.size());
+
+	// Calculate the CMAC from the SH256 from the plaintext of the srl.nds and put it after
+	array<u8, 32> injection_srl_nds_hash = calculateSha256(injection);
+	array<u8, 16> cmac_srl_nds = calculateCMAC(injection_srl_nds_hash, normalKey_CMAC);
+	memcpy(&dsiwareBin[0x5190 + 0x10], &cmac_srl_nds[0], 0x10);
 }
 
 int main() {
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
 	doStuff();
-	cout << std::endl << "Done!";
+	cout << endl << "Done!";
 	while (aptMainLoop()) {
 		hidScanInput();
 		if (hidKeysDown() & KEY_START) break; 
