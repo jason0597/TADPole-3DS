@@ -80,31 +80,48 @@ void doStuff() {
 	uint128_t keyY = parseMovableSed(readAllBytes("movable.sed"));
 	normalKey = keyScrambler(keyY, false);
 	normalKey_CMAC = keyScrambler(keyY, true);
-
 	vector<u8> injection = readAllBytes("Ugoku Memo Chou (Japan).nds");
 
-	vector<u8> header = getDump(0x4020, 0xF0);
+	array<u8, 16> allzero = array<u8, 16>(); // we'll need it later...
 
+	// ========== BEGIN INJECTION PROCESSS ==========
+
+	// === HEADER ===
+	vector<u8> header = getDump(0x4020, 0xF0);
 	// Read the magic value of the header
 	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
 		cout << "DECRYPTION FAILED!!!" << endl;
 	}
-	vector<u8> footer = getDump(0x4130, 0x4E0);
+	array<u8, 4> flipnote_size_LE = {0x00, 0x88, 0x21, 0x00}; // the size of flipnote in little endian
+	memcpy(&header[0x48 + 4], &flipnote_size_LE[0], 4);
 
+	vector<u8> encrypted_header = encryptAES(header, normalKey, allzero);
+	memcpy(&dsiwareBin[0x4020], &encrypted_header[0], header.size());
+
+	array<u8, 32> header_hash = calculateSha256(header);
+	array<u8, 16> header_cmac = calculateCMAC(header_hash, normalKey_CMAC);
+	
+	memcpy(&dsiwareBin[0x4020 + 0x110], &header_cmac[0], 16);
+	memcpy(&dsiwareBin[0x4020 + 0x110 + 0x10], &allzero[0], 16);
+	
+	// === SRL.NDS ===
 	// Basically, the srl.nds of DS Download play is right at the end of the TAD container
 	// Because we don't care about what it contains, we can overwrite it directly with our new
 	// flipnote srl.nds straight off the bat, without having to do any decryption
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
+	vector<u8> footer = getDump(0x4130, 0x4E0);
+
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
-	array<u8, 16> allzero = array<u8, 16>();
 	vector<u8> encrypted_srl_nds = encryptAES(injection, normalKey, allzero);
 	memcpy(&dsiwareBin[0x5190], &encrypted_srl_nds[0], encrypted_srl_nds.size());
 
-	// Calculate the CMAC from the SH256 from the plaintext of the srl.nds and put it after
-	array<u8, 32> injection_srl_nds_hash = calculateSha256(injection);
-	array<u8, 16> cmac_srl_nds = calculateCMAC(injection_srl_nds_hash, normalKey_CMAC);
-	memcpy(&dsiwareBin[0x5190 + 0x10], &cmac_srl_nds[0], 0x10);
+	array<u8, 32> flipnote_srl_nds_hash = calculateSha256(injection);
+	array<u8, 16> flipnote_srl_nds_cmac = calculateCMAC(flipnote_srl_nds_hash, normalKey_CMAC);
+	memcpy(&dsiwareBin[0x5190 + 0x218800], &flipnote_srl_nds_cmac[0], 0x10);
+	memcpy(&dsiwareBin[0x5190 + 0x218800 + 0x10], &allzero[0], 0x10);
+
+	// Now all that's left is to fix the footer, and we are done!	
 }
 
 int main() {
