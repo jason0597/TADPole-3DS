@@ -8,6 +8,8 @@
 #include "crypto.h"
 #include "tadpole.h"
 
+using std::array, std::vector;
+
 array<u8, 16> normalKey, normalKey_CMAC;
 vector<u8> dsiwareBin;
 
@@ -77,6 +79,7 @@ uint128_t parseMovableSed(vector<u8> movableSed) {
 
 void doStuff() {
 	dsiwareBin = readAllBytes("484E4441.bin");
+	vector<u8> ctcert_bin = readAllBytes("ctcert.bin");
 	uint128_t keyY = parseMovableSed(readAllBytes("movable.sed"));
 	normalKey = keyScrambler(keyY, false);
 	normalKey_CMAC = keyScrambler(keyY, true);
@@ -110,8 +113,6 @@ void doStuff() {
 	// flipnote srl.nds straight off the bat, without having to do any decryption
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
-	vector<u8> footer = getDump(0x4130, 0x4E0);
-
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
 	vector<u8> encrypted_srl_nds = encryptAES(injection, normalKey, allzero);
 	memcpy(&dsiwareBin[0x5190], &encrypted_srl_nds[0], encrypted_srl_nds.size());
@@ -121,7 +122,10 @@ void doStuff() {
 	memcpy(&dsiwareBin[0x5190 + 0x218800], &flipnote_srl_nds_cmac[0], 0x10);
 	memcpy(&dsiwareBin[0x5190 + 0x218800 + 0x10], &allzero[0], 0x10);
 
-	// Now all that's left is to fix the footer, and we are done!	
+	// === FOOTER ===
+	vector<u8> footer = getDump(0x4130, 0x4E0);
+	writeAllBytes("footer.bin", footer);
+	doSigning(ctcert_bin, footer);
 }
 
 int main() {
