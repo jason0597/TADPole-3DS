@@ -94,13 +94,9 @@ void doStuff() {
 	println("Reading flipnote srl.nds ");
 	vector<u8> injection = readAllBytes("Ugoku Memo Chou (Japan).nds");
 
-	array<u8, 16> allzero = array<u8, 16>(); // we'll need it later
-
-	println("Begining injection process");
-
 	// === HEADER ===
 	println("Decrypting header");
-	vector<u8> header = getDump(0x4020, 0xF0);
+	vector<u8> header = getSection(0x4020, 0xF0);
 	// Read the magic value of the header
 	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
 		cout << "DECRYPTION FAILED!!!" << endl;
@@ -109,20 +105,9 @@ void doStuff() {
 	array<u8, 4> flipnote_size_LE = {0x00, 0x88, 0x21, 0x00}; // the size of flipnote in little endian
 	memcpy(&header[0x48 + 4], &flipnote_size_LE[0], 4);
 
-	println("Encrypting the new header");
-	vector<u8> encrypted_header = encryptAES(header, normalKey, allzero);
-	memcpy(&dsiwareBin[0x4020], &encrypted_header[0], header.size());
+	println("Placing back header");
+	placeSection(header, 0x4020);
 
-	println("Calculating SHA256 of new header");
-	array<u8, 32> header_hash = calculateSha256(header);
-	println("Calculating CMAC of SHA256 of new header");
-	array<u8, 16> header_cmac = calculateCMAC(header_hash, normalKey_CMAC);
-	
-	println("Copying header CMAC");
-	memcpy(&dsiwareBin[0x4020 + 0x110], &header_cmac[0], 16);
-	println("Copying header allzero IV");
-	memcpy(&dsiwareBin[0x4020 + 0x110 + 0x10], &allzero[0], 16);
-	
 	// === SRL.NDS ===
 	// Basically, the srl.nds of DS Download play is right at the end of the TAD container
 	// Because we don't care about what it contains, we can overwrite it directly with our new
@@ -130,40 +115,33 @@ void doStuff() {
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
 	println("srl.nds");
+	println("Waiting 3 seconds");
+	svcSleepThread(3000000000);
+	println("Resizing array");
+	cout << "Initial size: " << dsiwareBin.size() << endl;
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
-	vector<u8> encrypted_srl_nds = encryptAES(injection, normalKey, allzero);
-	memcpy(&dsiwareBin[0x5190], &encrypted_srl_nds[0], encrypted_srl_nds.size());
-
-	array<u8, 32> flipnote_srl_nds_hash = calculateSha256(injection);
-	array<u8, 16> flipnote_srl_nds_cmac = calculateCMAC(flipnote_srl_nds_hash, normalKey_CMAC);
-	memcpy(&dsiwareBin[0x5190 + 0x218800], &flipnote_srl_nds_cmac[0], 0x10);
-	memcpy(&dsiwareBin[0x5190 + 0x218800 + 0x10], &allzero[0], 0x10);
+	cout << "New size: " << dsiwareBin.size() << endl;
+	println("Waiting 3 seconds");
+	svcSleepThread(3000000000);
+	println("Placing back srl.nds");
+	placeSection(injection, 0x5190);
 
 	// === FOOTER ===
 	println("Decrypting footer");
-	vector<u8> footer = getDump(0x4130, 0x4E0);
+	vector<u8> footer = getSection(0x4130, 0x4E0);
 	println("Signing footer");
 	doSigning(ctcert_bin, footer);
 
-	println("Encrypting footer");
-	vector<u8> encrypted_footer = encryptAES(footer, normalKey, allzero);
-	println("Writing footer");
-	memcpy(&dsiwareBin[0x4130], &encrypted_footer[0], footer.size());
-
-	println("Calculating SHA256 of footer");
-	array<u8, 32> footer_hash = calculateSha256(footer);
-	println("Calculating CMAC of SHA256 of footer");
-	array<u8, 16> footer_cmac = calculateCMAC(footer_hash, normalKey_CMAC);
-
-	println("Writing footer CMAC");
-	memcpy(&dsiwareBin[0x4130 + 0x4E0], &footer_cmac[0], 16);
-	println("Writing allzero footer IV");
-	memcpy(&dsiwareBin[0x4130 + 0x4E0 + 0x10], &allzero[0], 16);
+	println("Placing back footer");
+	placeSection(footer, 0x4130);
 }
 
 int main() {
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
+
+	while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
+
 	doStuff();
 	cout << endl << "Done!";
 	while (aptMainLoop()) {

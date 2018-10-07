@@ -50,7 +50,13 @@ array<u8, 16> calculateCMAC(array<u8, 32> &input, array<u8, 16> &key) {
 
 array<u8, 32> calculateSha256(vector<u8> &input) {
 	array<u8, 32> output;
-	mbedtls_sha256_ret(&input[0], input.size(), &output[0], 0);
+
+    mbedtls_sha256_context curctx;
+    mbedtls_sha256_init(&curctx);
+    mbedtls_sha256_starts(&curctx, 0);
+    mbedtls_sha256_update(&curctx, &input[0], input.size());
+    mbedtls_sha256_finish(&curctx, &output[0]);
+	
 	return output;
 }
 

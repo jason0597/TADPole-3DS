@@ -16,13 +16,35 @@ void elem_to_os(const element src, uint8_t * output_os);
 using std::vector, std::array;
 
 extern vector<u8> dsiwareBin;
-extern array<u8,16> normalKey;
+extern array<u8,16> normalKey, normalKey_CMAC;
 
-vector<u8> getDump(u32 data_offset, u32 size) {
+static void println(string str) {
+	cout << str << endl;
+}
+
+vector<u8> getSection(u32 offset, u32 size) {
         array<u8, 16> iv;
-        memcpy(&iv[0], &dsiwareBin[data_offset + size + 0x10], 0x10);
+        memcpy(&iv[0], &dsiwareBin[offset + size + 0x10], 0x10);
 
-        return decryptAES(dsiwareBin, normalKey, iv, data_offset, size);
+        return decryptAES(dsiwareBin, normalKey, iv, offset, size);
+}
+
+void placeSection(vector<u8> &section, u32 offset) {
+        array<u8, 0x10> allzero = {};
+        println("Encrypting the section");
+        vector<u8> encrypted_section = encryptAES(section, normalKey, allzero);
+        println("Copying the encrypted section at the offset");
+        memcpy(&dsiwareBin[offset], &encrypted_section[0], encrypted_section.size());
+
+        println("Calculating the plaintext section's sha256");
+        array<u8, 32> section_hash = calculateSha256(section);
+        println("Calculating the CMAC of the hash of the plaintext section");
+        array<u8, 16> section_cmac = calculateCMAC(section_hash, normalKey_CMAC);
+        println("Copying the CMAC immediately after the section");
+        memcpy(&dsiwareBin[offset + section.size()], &section_cmac[0], 0x10);
+
+        println("memsetting 0x00 immediately after the CMAC");
+        memset(&dsiwareBin[offset + section.size() + 0x10], 0, 0x10);
 }
 
 /*
@@ -47,10 +69,6 @@ vector<u8> getDump(u32 data_offset, u32 size) {
 
 */
 
-static void println(string str) {
-	cout << str << endl;
-}
-
 void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
         u32 totalhashsize = 13 * 0x20;
         memcpy(&footer[totalhashsize + 0x1BC], &ctcert_bin[0], 0x180);
@@ -70,10 +88,13 @@ void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
 	//snprintf(apcert->issuer, 0x40, "%s-%s", ctcert->issuer, ctcert->key_id);
         snprintf((char*)&footer[0x1DC + 0x80], 0x40, "%s-%s", &footer[totalhashsize + 0x1BC + 0x80], &footer[totalhashsize + 0x1BC + 0xC0]);
 
-        println("Signing APCert issuer");
         element r2, s2;
+        println("Signing APCert issuer");
         ninty_233_ecdsa_sign_sha256(&footer[0x1DC + 0x80], 0x100, &ctcert_bin[0x180], r2, s2);
-        println("Finished");
+
+        //while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
+
+        println("Converting elements to 0x3C u8 array");
         elem_to_os(r2, &signature[0x00]);
         elem_to_os(s2, &signature[0x1E]);
         println("Writing APCert to footer");
