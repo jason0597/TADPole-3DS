@@ -45,6 +45,10 @@ Crypto       // handles raw crypto actions, generating CMAC, encrypt/decrypt, si
 
 using std::vector, std::string, std::cout, std::endl;
 
+static void println(string str) {
+	cout << str << endl;
+}
+
 void writeAllBytes(string filename, vector<u8> &filedata) {
 	std::ofstream curfile(filename, std::ios::out | std::ios::binary);
 	curfile.write((char*)&filedata[0], filedata.size());
@@ -78,33 +82,45 @@ uint128_t parseMovableSed(vector<u8> movableSed) {
 }
 
 void doStuff() {
+	println("Reading 484E4441.bin ");
 	dsiwareBin = readAllBytes("484E4441.bin");
+	println("Reading ctcert.bin ");
 	vector<u8> ctcert_bin = readAllBytes("ctcert.bin");
+	println("Reading & parsing movable.sed ");
 	uint128_t keyY = parseMovableSed(readAllBytes("movable.sed"));
+	println("Scrambling keys ");
 	normalKey = keyScrambler(keyY, false);
 	normalKey_CMAC = keyScrambler(keyY, true);
+	println("Reading flipnote srl.nds ");
 	vector<u8> injection = readAllBytes("Ugoku Memo Chou (Japan).nds");
 
-	array<u8, 16> allzero = array<u8, 16>(); // we'll need it later...
+	array<u8, 16> allzero = array<u8, 16>(); // we'll need it later
 
-	// ========== BEGIN INJECTION PROCESSS ==========
+	println("Begining injection process");
 
 	// === HEADER ===
+	println("Decrypting header");
 	vector<u8> header = getDump(0x4020, 0xF0);
 	// Read the magic value of the header
 	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
 		cout << "DECRYPTION FAILED!!!" << endl;
 	}
+	println("Injecting new srl.nds size");
 	array<u8, 4> flipnote_size_LE = {0x00, 0x88, 0x21, 0x00}; // the size of flipnote in little endian
 	memcpy(&header[0x48 + 4], &flipnote_size_LE[0], 4);
 
+	println("Encrypting the new header");
 	vector<u8> encrypted_header = encryptAES(header, normalKey, allzero);
 	memcpy(&dsiwareBin[0x4020], &encrypted_header[0], header.size());
 
+	println("Calculating SHA256 of new header");
 	array<u8, 32> header_hash = calculateSha256(header);
+	println("Calculating CMAC of SHA256 of new header");
 	array<u8, 16> header_cmac = calculateCMAC(header_hash, normalKey_CMAC);
 	
+	println("Copying header CMAC");
 	memcpy(&dsiwareBin[0x4020 + 0x110], &header_cmac[0], 16);
+	println("Copying header allzero IV");
 	memcpy(&dsiwareBin[0x4020 + 0x110 + 0x10], &allzero[0], 16);
 	
 	// === SRL.NDS ===
@@ -113,6 +129,7 @@ void doStuff() {
 	// flipnote srl.nds straight off the bat, without having to do any decryption
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
+	println("srl.nds");
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
 	vector<u8> encrypted_srl_nds = encryptAES(injection, normalKey, allzero);
 	memcpy(&dsiwareBin[0x5190], &encrypted_srl_nds[0], encrypted_srl_nds.size());
@@ -123,9 +140,25 @@ void doStuff() {
 	memcpy(&dsiwareBin[0x5190 + 0x218800 + 0x10], &allzero[0], 0x10);
 
 	// === FOOTER ===
+	println("Decrypting footer");
 	vector<u8> footer = getDump(0x4130, 0x4E0);
-	writeAllBytes("footer.bin", footer);
+	println("Signing footer");
 	doSigning(ctcert_bin, footer);
+
+	println("Encrypting footer");
+	vector<u8> encrypted_footer = encryptAES(footer, normalKey, allzero);
+	println("Writing footer");
+	memcpy(&dsiwareBin[0x4130], &encrypted_footer[0], footer.size());
+
+	println("Calculating SHA256 of footer");
+	array<u8, 32> footer_hash = calculateSha256(footer);
+	println("Calculating CMAC of SHA256 of footer");
+	array<u8, 16> footer_cmac = calculateCMAC(footer_hash, normalKey_CMAC);
+
+	println("Writing footer CMAC");
+	memcpy(&dsiwareBin[0x4130 + 0x4E0], &footer_cmac[0], 16);
+	println("Writing allzero footer IV");
+	memcpy(&dsiwareBin[0x4130 + 0x4E0 + 0x10], &allzero[0], 16);
 }
 
 int main() {
