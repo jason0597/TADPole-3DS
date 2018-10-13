@@ -121,8 +121,6 @@ void doStuff() {
 	cout << "Initial size: " << dsiwareBin.size() << endl;
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
 	cout << "New size: " << dsiwareBin.size() << endl;
-	println("Placing back srl.nds");
-	placeSection(injection, 0x5190);
 
 	// === FOOTER ===
 	println("Decrypting footer");
@@ -132,6 +130,9 @@ void doStuff() {
 
 	println("Placing back footer");
 	placeSection(footer, 0x4130);
+
+	println("Placing back srl.nds");
+	placeSection(injection, 0x5190);
 }
 
 int main() {

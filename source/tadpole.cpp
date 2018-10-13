@@ -33,26 +33,20 @@ void placeSection(vector<u8> &section, u32 offset) {
         array<u8, 0x10> allzero = {};
         println("Encrypting the section");
 
-        try {
-                vector<u8> encrypted_section(section.size());
-                encryptAES(section, encrypted_section, normalKey, allzero);
-                println("Copying the encrypted section at the offset");
-                memcpy(&dsiwareBin[offset], encrypted_section.data(), encrypted_section.size());   
-        } catch (...) {
-                println("We caught an exception!");
-        }
-
+        vector<u8> encrypted_section(section.size());
+        encryptAES(section, encrypted_section, normalKey, allzero);
+        println("Copying the encrypted section at the offset");
+        std::cout << dsiwareBin.size() << " " << offset << " " << encrypted_section.size() << std::endl;
+        memcpy(&dsiwareBin.at(offset), encrypted_section.data(), encrypted_section.size());
         println("Calculating the plaintext section's sha256");
         array<u8, 32> section_hash = calculateSha256(section);
         println("Calculating the CMAC of the hash of the plaintext section");
         array<u8, 16> section_cmac = calculateCMAC(section_hash, normalKey_CMAC);
         println("Copying the CMAC immediately after the section");
-        memcpy(&dsiwareBin[offset + section.size()], section_cmac.data(), 0x10);
+        memcpy(&dsiwareBin.at(offset + section.size()), section_cmac.data(), 0x10);
 
         println("memsetting 0x00 immediately after the CMAC");
-        memset(&dsiwareBin[offset + section.size() + 0x10], 0, 0x10);
-
-        
+        memset(&dsiwareBin.at(offset + section.size() + 0x10), 0, 0x10);
 }
 
 /*
