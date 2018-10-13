@@ -55,7 +55,7 @@ CXXFLAGS	:= $(CFLAGS) -std=c++17
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lctru -lm -lmbedcrypto -L /home/jason/Projects/TADPole-3DS/ -lNinty-233
+LIBS	:= -lctru -lm -lmbedcrypto -L $(TOPDIR) -lNinty-233
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
