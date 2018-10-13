@@ -24,7 +24,7 @@ static void println(string str) {
 
 vector<u8> getSection(u32 offset, u32 size) {
         array<u8, 16> iv;
-        memcpy(&iv[0], &dsiwareBin[offset + size + 0x10], 0x10);
+        memcpy(iv.data(), &dsiwareBin[offset + size + 0x10], 0x10);
 
         return decryptAES(dsiwareBin, normalKey, iv, offset, size);
 }
@@ -37,19 +37,17 @@ void placeSection(vector<u8> &section, u32 offset) {
                 vector<u8> encrypted_section(section.size());
                 encryptAES(section, encrypted_section, normalKey, allzero);
                 println("Copying the encrypted section at the offset");
-                memcpy(&dsiwareBin[offset], &encrypted_section[0], encrypted_section.size());   
+                memcpy(&dsiwareBin[offset], encrypted_section.data(), encrypted_section.size());   
         } catch (...) {
                 println("We caught an exception!");
         }
-        
-        
 
         println("Calculating the plaintext section's sha256");
         array<u8, 32> section_hash = calculateSha256(section);
         println("Calculating the CMAC of the hash of the plaintext section");
         array<u8, 16> section_cmac = calculateCMAC(section_hash, normalKey_CMAC);
         println("Copying the CMAC immediately after the section");
-        memcpy(&dsiwareBin[offset + section.size()], &section_cmac[0], 0x10);
+        memcpy(&dsiwareBin[offset + section.size()], section_cmac.data(), 0x10);
 
         println("memsetting 0x00 immediately after the CMAC");
         memset(&dsiwareBin[offset + section.size() + 0x10], 0, 0x10);
@@ -81,7 +79,7 @@ void placeSection(vector<u8> &section, u32 offset) {
 
 void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
         u32 totalhashsize = 13 * 0x20;
-        memcpy(&footer[totalhashsize + 0x1BC], &ctcert_bin[0], 0x180);
+        memcpy(&footer[totalhashsize + 0x1BC], ctcert_bin.data(), 0x180);
 
         element r, s;
         println("Signing master hash");
@@ -91,7 +89,7 @@ void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
         array<u8, 0x3C> signature = {};
         elem_to_os(r, &signature[0x00]);
         elem_to_os(s, &signature[0x1E]);
-        memcpy(&footer[totalhashsize], &signature[0], 0x3C);
+        memcpy(&footer[totalhashsize], signature.data(), 0x3C);
 
         println("Fixing APCert issuer");
         memset(&footer[0x1DC + 0x80], 0, 0x40);
@@ -108,7 +106,7 @@ void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
         elem_to_os(r2, &signature[0x00]);
         elem_to_os(s2, &signature[0x1E]);
         println("Writing APCert to footer");
-        memcpy(&footer[0x1DC], &signature[0], 0x3C);
+        memcpy(&footer[0x1DC], signature.data(), 0x3C);
 
         println("Writing public key to APcert");
         memcpy(&footer[0x1DC + 0x108], &ctcert_bin[0x108], 0x3C);

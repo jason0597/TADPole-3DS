@@ -51,7 +51,7 @@ static void println(string str) {
 
 void writeAllBytes(string filename, vector<u8> &filedata) {
 	std::ofstream curfile(filename, std::ios::out | std::ios::binary);
-	curfile.write((char*)&filedata[0], filedata.size());
+	curfile.write((char*)filedata.data(), filedata.size());
 	curfile.close();
 }
 
@@ -61,7 +61,7 @@ vector<u8> readAllBytes(string filename) {
 
 	vector<u8> output(filesize);
 	curfile.seekg(0, std::ios::beg);
-	curfile.read((char*)&output[0], filesize);
+	curfile.read((char*)output.data(), filesize);
     curfile.close();
 
 	return output;
@@ -69,7 +69,7 @@ vector<u8> readAllBytes(string filename) {
 
 uint128_t parseMovableSed(vector<u8> movableSed) {
 	array<u8, 0x10> NKBytes;
-	memcpy(&NKBytes[0], &movableSed[0x110], 0x10);
+	memcpy(NKBytes.data(), &movableSed.at(0x110), 0x10);
 
 	uint64_t lowerNK = 0, upperNK = 0;
 	for (int i = 0; i < 8; i++)
@@ -105,7 +105,7 @@ void doStuff() {
 	}
 	println("Injecting new srl.nds size");
 	array<u8, 4> flipnote_size_LE = {0x00, 0x88, 0x21, 0x00}; // the size of flipnote in little endian
-	memcpy(&header[0x48 + 4], &flipnote_size_LE[0], 4);
+	memcpy(&header[0x48 + 4], flipnote_size_LE.data(), 4);
 
 	println("Placing back header");
 	placeSection(header, 0x4020);
