@@ -50,7 +50,7 @@ CFLAGS	:= -Wall -ggdb -O0 -mword-relocations -ffunction-sections $(ARCH)
 
 CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -std=c++17
+CXXFLAGS	:= $(CFLAGS) -std=c++17
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)

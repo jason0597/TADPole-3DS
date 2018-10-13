@@ -5,6 +5,7 @@
 #include <mbedtls/sha256.h>
 #include "uint128_t.h"
 #include "crypto.h"
+#include <iostream>
 
 using std::vector, std::array;
 
@@ -16,14 +17,21 @@ uint128_t rightRotate128(uint128_t n, unsigned int d) {
    return (n >> d) | (n << (128 - d));
 }
 
-vector<u8> encryptAES(vector<u8> &plaintext, array<u8, 16> &key, array<u8, 16> &iv) {
+vector<u8> encryptAES(vector<u8> &plaintext, vector<u8> &output, array<u8, 16> &key, array<u8, 16> &iv) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
 	mbedtls_aes_setkey_enc(&curctx, &key[0], 128);
-	vector<u8> output(plaintext.size());
 	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_ENCRYPT, plaintext.size(), &iv[0], &plaintext[0], &output[0]);
 	return output;
 }
+
+/*
+void encryptAES(vector<u8> &plaintext, array<u8, 16> &key, array<u8, 16> &iv, vector <u8> &output) {
+    mbedtls_aes_context curctx;
+    mbedtls_aes_init(&curctx);
+    mbedtls_aes_setkey_enc(&curctx, &key[0], 128);
+    mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_ENCRYPT, plaintext.size(), &iv[0], &plaintext[0], &output[0]);
+}*/
 
 vector<u8> decryptAES(vector<u8> &ciphertext, array<u8, 16> &key, array<u8, 16> &iv, u32 offset = 0, u32 size = 0) {
 	if (size == 0) { size = ciphertext.size(); }
@@ -56,7 +64,7 @@ array<u8, 32> calculateSha256(vector<u8> &input) {
     mbedtls_sha256_starts(&curctx, 0);
     mbedtls_sha256_update(&curctx, &input[0], input.size());
     mbedtls_sha256_finish(&curctx, &output[0]);
-	
+
 	return output;
 }
 

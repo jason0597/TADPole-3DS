@@ -84,6 +84,8 @@ uint128_t parseMovableSed(vector<u8> movableSed) {
 void doStuff() {
 	println("Reading 484E4441.bin ");
 	dsiwareBin = readAllBytes("484E4441.bin");
+	array<u8, 32> sha256_of_dsiwarebin = calculateSha256(dsiwareBin);
+	PRINTBYTES(sha256_of_dsiwarebin);
 	println("Reading ctcert.bin ");
 	vector<u8> ctcert_bin = readAllBytes("ctcert.bin");
 	println("Reading & parsing movable.sed ");
@@ -115,14 +117,10 @@ void doStuff() {
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
 	println("srl.nds");
-	println("Waiting 3 seconds");
-	svcSleepThread(3000000000);
 	println("Resizing array");
 	cout << "Initial size: " << dsiwareBin.size() << endl;
 	dsiwareBin.resize(dsiwareBin.size() + abs(dsiwareBin.size() - injection.size()));
 	cout << "New size: " << dsiwareBin.size() << endl;
-	println("Waiting 3 seconds");
-	svcSleepThread(3000000000);
 	println("Placing back srl.nds");
 	placeSection(injection, 0x5190);
 
