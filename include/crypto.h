@@ -3,8 +3,8 @@
 #include <array>
 #include "uint128_t.h"
 
-void encryptAES(std::vector<u8> &plaintext, std::vector<u8> &output, std::array<u8, 16> &key, std::array<u8, 16> &iv);
-std::vector<u8> decryptAES(std::vector<u8> &ciphertext, std::array<u8, 16> &key, std::array<u8, 16> &iv, u32 offset, u32 size);
-std::array<u8, 16> calculateCMAC(std::array<u8, 32> &input, std::array<u8, 16> &key);
-std::array<u8, 32> calculateSha256(std::vector<u8> &input);
+void encryptAES(u8 *plaintext, u32 size, u8 *key, u8 *iv, u8 *output);
+void decryptAES(u8 *ciphertext, u32 size, u8 *key, u8 *iv, u8 *output);
+void calculateCMAC(u8 *input, u32 size, u8 *key, u8 *output);
+void calculateSha256(u8 *input, u32 size, u8 *output);
 std::array<u8, 16> keyScrambler(uint128_t KeyY, bool cmacYN);

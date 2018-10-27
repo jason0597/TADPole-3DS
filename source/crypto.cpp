@@ -1,13 +1,12 @@
-#include <vector>
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
 #include <mbedtls/cmac.h>
 #include <mbedtls/sha256.h>
+#include <array>
 #include "uint128_t.h"
 #include "crypto.h"
-#include <iostream>
 
-using std::vector, std::array;
+using std::array;
 
 uint128_t leftRotate128(uint128_t n, unsigned int d) {
    return (n << d) | (n >> (128 - d));
@@ -17,46 +16,35 @@ uint128_t rightRotate128(uint128_t n, unsigned int d) {
    return (n >> d) | (n << (128 - d));
 }
 
-void encryptAES(vector<u8> &plaintext, vector<u8> &output, array<u8, 16> &key, array<u8, 16> &iv) {
+void encryptAES(u8 *plaintext, u32 size, u8 *key, u8 *iv, u8 *output) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
-	mbedtls_aes_setkey_enc(&curctx, key.data(), 128);
-	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_ENCRYPT, plaintext.size(), iv.data(), plaintext.data(), output.data());
+	mbedtls_aes_setkey_enc(&curctx, key, 128);
+	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_ENCRYPT, size, iv, plaintext, output);
 }
 
-vector<u8> decryptAES(vector<u8> &ciphertext, array<u8, 16> &key, array<u8, 16> &iv, u32 offset = 0, u32 size = 0) {
-	if (size == 0) { size = ciphertext.size(); }
+void decryptAES(u8 *ciphertext, u32 size, u8 *key, u8 *iv, u8 *output) {
 	mbedtls_aes_context curctx;
 	mbedtls_aes_init(&curctx);
-	mbedtls_aes_setkey_dec(&curctx, key.data(), 128);
-
-	vector<u8> output(size);
-	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_DECRYPT, size, iv.data(), &ciphertext.at(offset), output.data());
-
-	return output;
+	mbedtls_aes_setkey_dec(&curctx, key, 128);
+	mbedtls_aes_crypt_cbc(&curctx, MBEDTLS_AES_DECRYPT, size, iv, ciphertext, output);
 }
 
-array<u8, 16> calculateCMAC(array<u8, 32> &input, array<u8, 16> &key) {
+void calculateCMAC(u8 *input, u32 size, u8 *key, u8 *output) {
     const mbedtls_cipher_info_t* cipher_info = mbedtls_cipher_info_from_values(
         MBEDTLS_CIPHER_ID_AES,
         128,
         MBEDTLS_MODE_CBC
     );
-    array<u8, 16> output;
-    mbedtls_cipher_cmac(cipher_info, key.data(), key.size(), input.data(), input.size(), output.data());
-    return output;
+    mbedtls_cipher_cmac(cipher_info, key, 128, input, size, output);
 }
 
-array<u8, 32> calculateSha256(vector<u8> &input) {
-	array<u8, 32> output;
-
+void calculateSha256(u8 *input, u32 size, u8 *output) {
     mbedtls_sha256_context curctx;
     mbedtls_sha256_init(&curctx);
     mbedtls_sha256_starts(&curctx, 0);
-    mbedtls_sha256_update(&curctx, input.data(), input.size());
-    mbedtls_sha256_finish(&curctx, output.data());
-
-	return output;
+    mbedtls_sha256_update(&curctx, input, size);
+    mbedtls_sha256_finish(&curctx, output);
 }
 
 // NormalKey = (((KeyX ROL 2) XOR KeyY) + C1) ROR 41

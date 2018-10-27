@@ -1,52 +1,37 @@
 #include <3ds.h>
-#include <vector>
 #include <cstring> // for memcpy()
 #include <cstdio>
-#include <iostream>
+#include <vector>
+#include <array>
 #include "crypto.h"
 
-using namespace std;
-
-#define PRINTBYTES(bytes) for (u32 i = 0; i < bytes.size(); i++) cout << std::hex << ((bytes[i] < 0x10) ? "0" : "") << (int)bytes[i]; cout << std::dec << std::endl;
+using std::vector, std::array;
 
 typedef uint32_t element[8];
 void ninty_233_ecdsa_sign_sha256(uint8_t * input, int length, const uint8_t * private_key, element r_out, element s_out);
 void elem_to_os(const element src, uint8_t * output_os);
 
-using std::vector, std::array;
-
-extern vector<u8> dsiwareBin;
-extern array<u8,16> normalKey, normalKey_CMAC;
-
-static void println(string str) {
-	cout << str << endl;
+void getSection(u8 *dsiware_pointer, u32 section_size, u8 *key, u8 *output) {
+        decryptAES(dsiware_pointer, section_size, key, (dsiware_pointer + section_size + 0x10), output);
 }
 
-vector<u8> getSection(u32 offset, u32 size) {
-        array<u8, 16> iv;
-        memcpy(iv.data(), &dsiwareBin[offset + size + 0x10], 0x10);
+void placeSection(u8 *dsiware_pointer, u8 *section, u32 section_size, u8 *key, u8 *key_cmac) {
+        u8 allzero[0x10]= {0};
 
-        return decryptAES(dsiwareBin, normalKey, iv, offset, size);
-}
+        u8 *encrypted_section = new u8[section_size];
+        encryptAES(section, section_size, key, allzero, encrypted_section);
+        
+        memcpy(dsiware_pointer, encrypted_section, section_size);
 
-void placeSection(vector<u8> &section, u32 offset) {
-        array<u8, 0x10> allzero = {};
-        println("Encrypting the section");
+        u8 section_hash[0x20];
+        calculateSha256(section, section_size, section_hash);
+        u8 section_cmac[16];
+        calculateCMAC(section_hash, 32, key_cmac, section_cmac);
 
-        vector<u8> encrypted_section(section.size());
-        encryptAES(section, encrypted_section, normalKey, allzero);
-        println("Copying the encrypted section at the offset");
-        std::cout << dsiwareBin.size() << " " << offset << " " << encrypted_section.size() << std::endl;
-        memcpy(&dsiwareBin.at(offset), encrypted_section.data(), encrypted_section.size());
-        println("Calculating the plaintext section's sha256");
-        array<u8, 32> section_hash = calculateSha256(section);
-        println("Calculating the CMAC of the hash of the plaintext section");
-        array<u8, 16> section_cmac = calculateCMAC(section_hash, normalKey_CMAC);
-        println("Copying the CMAC immediately after the section");
-        memcpy(&dsiwareBin.at(offset + section.size()), section_cmac.data(), 0x10);
+        memcpy((dsiware_pointer + section_size), section_cmac, 0x10);
+        memcpy((dsiware_pointer + section_size + 0x10), allzero, 0x10);
 
-        println("memsetting 0x00 immediately after the CMAC");
-        memset(&dsiwareBin.at(offset + section.size() + 0x10), 0, 0x10);
+        delete[] encrypted_section;
 }
 
 /*
@@ -71,37 +56,37 @@ void placeSection(vector<u8> &section, u32 offset) {
 
 */
 
-void doSigning(vector<u8> &ctcert_bin, vector<u8> &footer) {
+void doSigning(u8 *ctcert_bin, u8 *footer) {
         u32 totalhashsize = 13 * 0x20;
-        memcpy(&footer[totalhashsize + 0x1BC], ctcert_bin.data(), 0x180);
+        memcpy(&footer[totalhashsize + 0x1BC], ctcert_bin, 0x180);
 
         element r, s;
-        println("Signing master hash");
+        printf("Signing master hash\n");
         ninty_233_ecdsa_sign_sha256(&footer[0x00], (totalhashsize), &ctcert_bin[0x180], r, s);
 
-        println("Writing signature to footer");
+        printf("Writing signature to footer\n");
         array<u8, 0x3C> signature = {};
         elem_to_os(r, &signature[0x00]);
         elem_to_os(s, &signature[0x1E]);
         memcpy(&footer[totalhashsize], signature.data(), 0x3C);
 
-        println("Fixing APCert issuer");
+        printf("Fixing APCert issuer\n");
         memset(&footer[0x1DC + 0x80], 0, 0x40);
 	//snprintf(apcert->issuer, 0x40, "%s-%s", ctcert->issuer, ctcert->key_id);
         snprintf((char*)&footer[0x1DC + 0x80], 0x40, "%s-%s", &footer[totalhashsize + 0x1BC + 0x80], &footer[totalhashsize + 0x1BC + 0xC0]);
 
         element r2, s2;
-        println("Signing APCert issuer");
+        printf("Signing APCert issuer\n");
         ninty_233_ecdsa_sign_sha256(&footer[0x1DC + 0x80], 0x100, &ctcert_bin[0x180], r2, s2);
 
         //while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
 
-        println("Converting elements to 0x3C u8 array");
+        printf("Converting elements to 0x3C u8 array\n");
         elem_to_os(r2, &signature[0x00]);
         elem_to_os(s2, &signature[0x1E]);
-        println("Writing APCert to footer");
+        printf("Writing APCert to footer\n");
         memcpy(&footer[0x1DC], signature.data(), 0x3C);
 
-        println("Writing public key to APcert");
+        printf("Writing public key to APcert\n");
         memcpy(&footer[0x1DC + 0x108], &ctcert_bin[0x108], 0x3C);
 }
