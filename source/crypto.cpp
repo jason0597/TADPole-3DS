@@ -2,19 +2,7 @@
 #include <mbedtls/cipher.h>
 #include <mbedtls/cmac.h>
 #include <mbedtls/sha256.h>
-#include <array>
-#include "uint128_t.h"
 #include "crypto.h"
-
-using std::array;
-
-uint128_t leftRotate128(uint128_t n, unsigned int d) {
-   return (n << d) | (n >> (128 - d));
-}
- 
-uint128_t rightRotate128(uint128_t n, unsigned int d) {
-   return (n >> d) | (n << (128 - d));
-}
 
 void encryptAES(u8 *plaintext, u32 size, u8 *key, u8 *iv, u8 *output) {
 	mbedtls_aes_context curctx;
@@ -47,23 +35,36 @@ void calculateSha256(u8 *input, u32 size, u8 *output) {
     mbedtls_sha256_finish(&curctx, output);
 }
 
-// NormalKey = (((KeyX ROL 2) XOR KeyY) + C1) ROR 41
-array<u8, 16> keyScrambler(uint128_t KeyY, bool cmacYN) {
-	uint128_t C(0x1FF9E9AAC5FE0408, 0x024591DC5D52768A);
-	uint128_t KeyX(0x6FBB01F872CAF9C0, 0x1834EEC04065EE53);
-	uint128_t CMAC_KeyX(0xB529221CDDB5DB5A, 0x1BF26EFF2041E875);
-	
-	uint128_t NormalKey = rightRotate128(((leftRotate128(cmacYN ? CMAC_KeyX : KeyX, 2) ^ KeyY) + C), 41);
+// Full credit goes to https://github.com/luigoalma/3ds_keyscrambler/blob/master/src/UnScrambler.c#L50
+void keyScrambler(u8 *Y, bool cmacYN, u8 *normal_key) {
+	u8 C[0x10] = {0x1F, 0xF9, 0xE9, 0xAA, 0xC5, 0xFE, 0x04, 0x08, 0x02, 0x45, 0x91, 0xDC, 0x5D, 0x52, 0x76, 0x8A};
+	u8 X_normal[0x10] = {0x6F, 0xBB, 0x01, 0xF8, 0x72, 0xCA, 0xF9, 0xC0, 0x18, 0x34, 0xEE, 0xC0, 0x40, 0x65, 0xEE, 0x53};
+	u8 X_cmac[0x10] = {0xB5, 0x29, 0x22, 0x1C, 0xDD, 0xB5, 0xDB, 0x5A, 0x1B, 0xF2, 0x6E, 0xFF, 0x20, 0x41, 0xE8, 0x75};
+	u8 *X = (cmacYN) ? X_cmac : X_normal;
 
-	u64 lowerNK = NormalKey.lower();
-	u64 upperNK = NormalKey.upper();
-
-	array<u8, 16> NKBytes;
-
-	for (int i = 0; i < 8; i++)
-    	NKBytes[7 - i] = (upperNK >> (i * 8));
-	for (int i = 0; i < 8; i++)
-		NKBytes[15 - i] = (lowerNK >> (i * 8));
-
-	return NKBytes;
-}
+	int i;
+	u8 shifted_X[0x10];
+	for(i=0;i<16;i++){
+		//The joke is already dead, but I keep doing it. So, more type casts and masks.
+		if(i!=15) shifted_X[i] = (u8)((((u8)X[i] << (u8)2)&0xFC) + (((u8)X[i+1] >> (u8)6)&0x03))&0xff;
+		else shifted_X[i] = (u8)((((u8)X[i] << (u8)2)&0xFC) + (((u8)X[0] >> (u8)6)&0x03))&0xff;
+	}
+	u8 shifted_X_xor_Y[0x10];
+	for(i=0;i<16;i++){
+		//Do I need to say anything more about the type casts?
+		shifted_X_xor_Y[i] = (u8)((u8)shifted_X[i] ^ (u8)Y[i]);
+	}
+	u8 shifted_X_xor_Y_addition_C[0x10];
+	u8 carry = 0;
+	for(i=0;i<16;i++){
+		//Type casts. Type casts everywhere.
+		shifted_X_xor_Y_addition_C[15-i] = (u8)((u8)shifted_X_xor_Y[15-i] + (u8)carry + (u8)C[15-i]);
+		carry = (u8)(((u16)((u8)shifted_X_xor_Y[15-i] + (u8)carry + (u8)C[15-i])) >> (u8)8);
+	}
+	for(i=0;i<16;i++){
+		//Just make it stop! Oh wait, there's no more type casts and masks after this loop.
+		if(i < 5) normal_key[i] = (u8)((((u8)shifted_X_xor_Y_addition_C[10+i] << (u8)7)&0x80) + (((u8)shifted_X_xor_Y_addition_C[10+i+1] >> (u8)1)&0x7F))&0xff;
+		else if (i == 5) normal_key[i] = (u8)((((u8)shifted_X_xor_Y_addition_C[10+i] << (u8)7)&0x80) + (((u8)shifted_X_xor_Y_addition_C[0] >> (u8)1)&0x7F))&0xff;
+		else normal_key[i] = (u8)((((u8)shifted_X_xor_Y_addition_C[-6+i] << (u8)7)&0x80) + (((u8)shifted_X_xor_Y_addition_C[-6+i+1] >> (u8)1)&0x7F))&0xff;
+	}
+};

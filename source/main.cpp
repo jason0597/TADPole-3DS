@@ -2,7 +2,6 @@
 #include <vector>
 #include <cstring> // for memcpy()
 #include <cmath> // for abs()
-#include "uint128_t.h"
 #include "crypto.h"
 #include "tadpole.h"
 
@@ -63,20 +62,6 @@ void writeAllBytes(const char* filename, u8 *filedata, u32 filelen) {
 	fclose(fileptr);
 }
 
-uint128_t parseMovableSed(u8 *movable) {
-	u8 NKBytes[16];
-	memcpy(NKBytes, (movable + 0x110), 0x10);
-
-	uint64_t lowerNK = 0, upperNK = 0;
-	for (int i = 0; i < 8; i++)
-		lowerNK |= ((u64)NKBytes[i] << ((7 - i) * 8));
-	for (int i = 7; i < 16; i++)
-		upperNK |= ((u64)NKBytes[i] << ((15 - i) * 8));
-
-	uint128_t output(lowerNK, upperNK);
-	return output;
-}
-
 void doStuff() {
 	u8 *dsiware, *ctcert, *movable, *injection;
 	u32 dsiware_size, ctcert_size, movable_size, injection_size;
@@ -89,16 +74,22 @@ void doStuff() {
 	injection = readAllBytes("Ugoku Memo Chou (Japan).nds", &injection_size);
 	printf("Reading & parsing movable.sed\n");
 	movable = readAllBytes("movable.sed", &movable_size);
-	uint128_t keyY = parseMovableSed(movable);
 
 	printf("Scrambling keys\n");
-	array<u8, 16> normalKey = keyScrambler(keyY, false);
-	array<u8, 16> normalKey_CMAC = keyScrambler(keyY, true);
+	u8 normalKey[0x10], normalKey_CMAC[0x10];
+	keyScrambler((movable + 0x110), false, normalKey);
+	keyScrambler((movable + 0x110), true, normalKey_CMAC);
+	for (int i = 0; i < 16; i++) {
+		printf("%X", normalKey[i]);
+	} printf("\n");
+	for (int i = 0; i < 16; i++) {
+		printf("%X", normalKey_CMAC[i]);
+	} printf("\n");
 
 	// === HEADER ===
 	printf("Decrypting header\n");
 	u8 *header = new u8[0xF0];
-	getSection((dsiware + 0x4020), 0xF0, normalKey.data(), header);
+	getSection((dsiware + 0x4020), 0xF0, normalKey, header);
 	
 	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
 		printf("DECRYPTION FAILED!!!\n");
@@ -109,7 +100,7 @@ void doStuff() {
 	memcpy((header + 0x48 + 4), flipnote_size_LE, 4);
 
 	printf("Placing back header\n");
-	placeSection((dsiware + 0x4020), header, 0xF0, normalKey.data(), normalKey_CMAC.data());
+	placeSection((dsiware + 0x4020), header, 0xF0, normalKey, normalKey_CMAC);
 	delete[] header;
 
 	// === SRL.NDS ===
@@ -124,17 +115,17 @@ void doStuff() {
 	printf("New DSiWare size: %X\n", dsiware_size);
 	realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
-	placeSection((dsiware + 0x5190), injection, injection_size, normalKey.data(), normalKey_CMAC.data());
+	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
 
 	// === FOOTER ===
 	printf("Decrypting footer\n");
 	u8 *footer = new u8[0x4E0];
-	getSection((dsiware + 0x4130), 0x4E0, normalKey.data(), footer);
+	getSection((dsiware + 0x4130), 0x4E0, normalKey, footer);
 	printf("Signing footer\n");
 	doSigning(ctcert, footer);
 
 	printf("Placing back footer\n");
-	placeSection((dsiware + 0x4130), footer, 0x4E0, normalKey.data(), normalKey_CMAC.data());
+	placeSection((dsiware + 0x4130), footer, 0x4E0, normalKey, normalKey_CMAC);
 	delete[] footer;
 
 	writeAllBytes("484E4441.bin.patched", dsiware, dsiware_size);
