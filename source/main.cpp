@@ -6,6 +6,8 @@
 #include "crypto.h"
 #include "tadpole.h"
 
+#define WAITA() while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
+
 using std::array, std::vector;
 
 /*
@@ -39,8 +41,9 @@ Crypto       // handles raw crypto actions, generating CMAC, encrypt/decrypt, si
 u8 *readAllBytes(const char *filename, u32 *filelen) {
 	FILE *fileptr = fopen(filename, "rb");
 	if (fileptr == NULL) {
-		printf("!!! Failed to open %s !!!", filename);
-		return NULL;
+		printf("!!! Failed to open %s !!!\n", filename);
+		WAITA();
+		exit(-1);
 	}
 	fseek(fileptr, 0, SEEK_END);
 	*filelen = ftell(fileptr);
@@ -84,7 +87,7 @@ void doStuff() {
 	ctcert = readAllBytes("ctcert.bin", &ctcert_size);
 	printf("Reading flipnote srl.nds\n");
 	injection = readAllBytes("Ugoku Memo Chou (Japan).nds", &injection_size);
-	printf("Reading & parsing movable.sed ");
+	printf("Reading & parsing movable.sed\n");
 	movable = readAllBytes("movable.sed", &movable_size);
 	uint128_t keyY = parseMovableSed(movable);
 
@@ -101,7 +104,7 @@ void doStuff() {
 		printf("DECRYPTION FAILED!!!\n");
 	}
 
-	printf("Injecting new srl.nds size");
+	printf("Injecting new srl.nds size\n");
 	u8 flipnote_size_LE[4] = {0x00, 0x88, 0x21, 0x00}; // the size of flipnote in little endian
 	memcpy((header + 0x48 + 4), flipnote_size_LE, 4);
 
@@ -116,7 +119,10 @@ void doStuff() {
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
 	printf("Resizing array\n");
-	realloc(dsiware, dsiware_size + abs(dsiware_size - injection_size));
+	printf("Old DSiWare size: %X\n", dsiware_size);
+	dsiware_size += abs(0x69BC0 - injection_size); // new TAD size = old TAD size + abs(old srl size - new srl size)
+	printf("New DSiWare size: %X\n", dsiware_size);
+	realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey.data(), normalKey_CMAC.data());
 
@@ -131,7 +137,7 @@ void doStuff() {
 	placeSection((dsiware + 0x4130), footer, 0x4E0, normalKey.data(), normalKey_CMAC.data());
 	delete[] footer;
 
-	writeAllBytes("484E4441.bin.patched", dsiware, dsiware_size + abs(dsiware_size - injection_size));
+	writeAllBytes("484E4441.bin.patched", dsiware, dsiware_size);
 }
 
 int main() {
@@ -139,7 +145,7 @@ int main() {
 	consoleInit(GFX_TOP, NULL);
 
 	printf("Press [A] to begin!\n\n");
-	while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
+	WAITA();
 
 	doStuff();
 
