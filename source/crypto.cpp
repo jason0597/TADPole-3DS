@@ -22,7 +22,7 @@ void calculateCMAC(u8 *input, u32 size, u8 *key, u8 *output) {
     const mbedtls_cipher_info_t* cipher_info = mbedtls_cipher_info_from_values(
         MBEDTLS_CIPHER_ID_AES,
         128,
-        MBEDTLS_MODE_CBC
+        MBEDTLS_MODE_ECB
     );
     mbedtls_cipher_cmac(cipher_info, key, 128, input, size, output);
 }

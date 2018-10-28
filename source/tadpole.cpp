@@ -18,13 +18,30 @@ void getSection(u8 *dsiware_pointer, u32 section_size, u8 *key, u8 *output) {
 void placeSection(u8 *dsiware_pointer, u8 *section, u32 section_size, u8 *key, u8 *key_cmac) {
         u8 allzero[0x10]= {0};
 
+        printf("Encrypting section and placing\n");
         encryptAES(section, section_size, key, allzero, dsiware_pointer);
 
         u8 section_hash[0x20];
+        printf("Calculating section hash\n");
         calculateSha256(section, section_size, section_hash);
 
-        calculateCMAC(section_hash, 32, key_cmac, (dsiware_pointer + section_size));
-        memcpy((dsiware_pointer + section_size + 0x10), allzero, 0x10);
+        printf("Old CMAC: ");
+        for (int i = 0; i < 16; i++) { printf("%02X", (dsiware_pointer + section_size)[i]); } printf("\n");
+        u8 section_cmac[0x20];
+        printf("Uninitialized array: ");
+        for (int i = 0; i < 16; i++) { printf("%02X", section_cmac[i]); } printf("\n");
+        printf("Calculating section CMAC\n");
+        calculateCMAC(section_hash, 0x20, key_cmac, section_cmac);
+
+        printf("New CMAC: ");
+        for (int i = 0; i < 16; i++) { printf("%02X", section_cmac[i]); } printf("\n");
+        printf("Copying new CMAC\n");
+        memcpy((dsiware_pointer + section_size), section_cmac, 0x10);
+        printf("New placed CMAC: ");
+        for (int i = 0; i < 16; i++) { printf("%02X", (dsiware_pointer + section_size)[i]); } printf("\n");
+
+        printf("Writing all-zero IV\n");
+        memset((dsiware_pointer + section_size + 0x10), 0, 0x10);
 }
 
 /*
