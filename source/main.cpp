@@ -65,6 +65,7 @@ void writeAllBytes(const char* filename, u8 *filedata, u32 filelen) {
 void doStuff() {
 	u8 *dsiware, *ctcert, *movable, *injection;
 	u32 dsiware_size, ctcert_size, movable_size, injection_size;
+	u8 header_hash[0x20], srl_hash[0x20];
 
 	printf("Reading 484E4441.bin\n");
 	dsiware = readAllBytes("484E4441.bin", &dsiware_size);
@@ -79,13 +80,7 @@ void doStuff() {
 	u8 normalKey[0x10], normalKey_CMAC[0x10];
 	keyScrambler((movable + 0x110), false, normalKey);
 	keyScrambler((movable + 0x110), true, normalKey_CMAC);
-	for (int i = 0; i < 16; i++) {
-		printf("%02X", normalKey[i]);
-	} printf("\n");
-	for (int i = 0; i < 16; i++) {
-		printf("%02X", normalKey_CMAC[i]);
-	} printf("\n");
-
+	
 	// === HEADER ===
 	printf("Decrypting header\n");
 	u8 *header = new u8[0xF0];
@@ -102,6 +97,7 @@ void doStuff() {
 	printf("Placing back header\n");
 	placeSection((dsiware + 0x4020), header, 0xF0, normalKey, normalKey_CMAC);
 	delete[] header;
+	calculateSha256((dsiware + 0x4020), 0xF0, header_hash);
 
 	// === SRL.NDS ===
 	// Basically, the srl.nds of DS Download play is right at the end of the TAD container
@@ -116,11 +112,18 @@ void doStuff() {
 	dsiware = (u8*)realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
+	calculateSha256((dsiware + 0x5190), injection_size, srl_hash);
 
 	// === FOOTER ===
 	printf("Decrypting footer\n");
 	u8 *footer = new u8[0x4E0];
 	getSection((dsiware + 0x4130), 0x4E0, normalKey, footer);
+
+	printf("Fixing hashes\n");
+	memcpy((footer + 0x20), header_hash, 0x20); //Fix the header hash
+	memcpy((footer + 0x60), srl_hash, 0x20);	//Fix the srl.nds hash
+	calculateSha256(footer, (13 * 0x20), (footer + (13 * 0x20))); //Fix the master hash
+
 	printf("Signing footer\n");
 	doSigning(ctcert, footer);
 
