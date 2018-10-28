@@ -110,9 +110,9 @@ void doStuff() {
 	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
 	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
 	printf("Resizing array\n");
-	printf("Old DSiWare size: %X\n", dsiware_size);
+	printf("Old DSiWare size: %lX\n", dsiware_size);
 	dsiware_size += abs(0x69BC0 - injection_size); // new TAD size = old TAD size + abs(old srl size - new srl size)
-	printf("New DSiWare size: %X\n", dsiware_size);
+	printf("New DSiWare size: %lX\n", dsiware_size);
 	dsiware = (u8*)realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
