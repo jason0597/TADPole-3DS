@@ -80,10 +80,10 @@ void doStuff() {
 	keyScrambler((movable + 0x110), false, normalKey);
 	keyScrambler((movable + 0x110), true, normalKey_CMAC);
 	for (int i = 0; i < 16; i++) {
-		printf("%X", normalKey[i]);
+		printf("%02X", normalKey[i]);
 	} printf("\n");
 	for (int i = 0; i < 16; i++) {
-		printf("%X", normalKey_CMAC[i]);
+		printf("%02X", normalKey_CMAC[i]);
 	} printf("\n");
 
 	// === HEADER ===
@@ -113,7 +113,7 @@ void doStuff() {
 	printf("Old DSiWare size: %X\n", dsiware_size);
 	dsiware_size += abs(0x69BC0 - injection_size); // new TAD size = old TAD size + abs(old srl size - new srl size)
 	printf("New DSiWare size: %X\n", dsiware_size);
-	realloc(dsiware, dsiware_size);
+	dsiware = (u8*)realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
 

@@ -18,20 +18,13 @@ void getSection(u8 *dsiware_pointer, u32 section_size, u8 *key, u8 *output) {
 void placeSection(u8 *dsiware_pointer, u8 *section, u32 section_size, u8 *key, u8 *key_cmac) {
         u8 allzero[0x10]= {0};
 
-        u8 *encrypted_section = new u8[section_size];
-        encryptAES(section, section_size, key, allzero, encrypted_section);
-        
-        memcpy(dsiware_pointer, encrypted_section, section_size);
+        encryptAES(section, section_size, key, allzero, dsiware_pointer);
 
         u8 section_hash[0x20];
         calculateSha256(section, section_size, section_hash);
-        u8 section_cmac[16];
-        calculateCMAC(section_hash, 32, key_cmac, section_cmac);
 
-        memcpy((dsiware_pointer + section_size), section_cmac, 0x10);
+        calculateCMAC(section_hash, 32, key_cmac, (dsiware_pointer + section_size));
         memcpy((dsiware_pointer + section_size + 0x10), allzero, 0x10);
-
-        delete[] encrypted_section;
 }
 
 /*
