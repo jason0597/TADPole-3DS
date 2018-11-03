@@ -1,11 +1,7 @@
 #include <3ds.h>
-#include <cstring> // for memcpy()
+#include <cstring>
 #include <cstdio>
-#include <vector>
-#include <array>
 #include "crypto.h"
-
-using std::vector, std::array;
 
 typedef uint32_t element[8];
 void ninty_233_ecdsa_sign_sha256(uint8_t * input, int length, const uint8_t * private_key, element r_out, element s_out);
@@ -53,35 +49,37 @@ void placeSection(u8 *dsiware_pointer, u8 *section, u32 section_size, u8 *key, u
 
 void doSigning(u8 *ctcert_bin, u8 *footer) {
         u32 totalhashsize = 13 * 0x20;
-        memcpy(&footer[totalhashsize + 0x1BC], ctcert_bin, 0x180);
-
         element r, s;
+        u8 signature[0x40], signature_trimmed[0x3C];
+        
+        printf("Writing new pubkey into APCert\n");
+        memcpy((footer + 0x1DC + 0x108), (ctcert_bin + 0x108), 0x1E);
+
+        printf("Copying CTCert at 0x35C\n");
+        memcpy((footer + 0x35C), ctcert_bin, 0x180);
+
         printf("Signing master hash\n");
-        ninty_233_ecdsa_sign_sha256(&footer[0x00], (totalhashsize), &ctcert_bin[0x180], r, s);
+        ninty_233_ecdsa_sign_sha256(footer, totalhashsize, (ctcert_bin + 0x180), r, s);
 
         printf("Writing signature to footer\n");
-        array<u8, 0x3C> signature = {};
-        elem_to_os(r, &signature[0x00]);
-        elem_to_os(s, &signature[0x1E]);
-        memcpy(&footer[totalhashsize], signature.data(), 0x3C);
+        elem_to_os(r, signature);
+        elem_to_os(s, (signature + 0x20));
+        memcpy(signature_trimmed, (signature + 2), 0x1E);
+        memcpy(signature_trimmed, (signature + 0x20 + 2), 0x1E);
+        memcpy((footer + totalhashsize), signature_trimmed, 0x3C);
 
         printf("Fixing APCert issuer\n");
-        memset(&footer[0x1DC + 0x80], 0, 0x40);
+        memset((footer + 0x1DC + 0x80), 0, 0x40);
 	//snprintf(apcert->issuer, 0x40, "%s-%s", ctcert->issuer, ctcert->key_id);
-        snprintf((char*)&footer[0x1DC + 0x80], 0x40, "%s-%s", &footer[totalhashsize + 0x1BC + 0x80], &footer[totalhashsize + 0x1BC + 0xC0]);
+        snprintf((char*)(footer + 0x1DC + 0x80), 0x40, "%s-%s", (char*)(footer + 0x35C + 0x80), (char*)(footer + 0x35C + 0xC4));
 
-        element r2, s2;
         printf("Signing APCert issuer\n");
-        ninty_233_ecdsa_sign_sha256(&footer[0x1DC + 0x80], 0x100, &ctcert_bin[0x180], r2, s2);
+        ninty_233_ecdsa_sign_sha256((footer + 0x1DC + 0x80), 0x100, (ctcert_bin + 0x180), r, s);
 
-        //while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
-
-        printf("Converting elements to 0x3C u8 array\n");
-        elem_to_os(r2, &signature[0x00]);
-        elem_to_os(s2, &signature[0x1E]);
-        printf("Writing APCert to footer\n");
-        memcpy(&footer[0x1DC], signature.data(), 0x3C);
-
-        printf("Writing public key to APcert\n");
-        memcpy(&footer[0x1DC + 0x108], &ctcert_bin[0x108], 0x3C);
+        printf("Writing APCert signature\n");
+        elem_to_os(r, signature);
+        elem_to_os(s, (signature + 0x20));
+        memcpy(signature_trimmed, (signature + 2), 0x1E);
+        memcpy(signature_trimmed, (signature + 0x20 + 2), 0x1E);
+        memcpy((footer + 0x1DC + 4), signature_trimmed, 0x3C);
 }
