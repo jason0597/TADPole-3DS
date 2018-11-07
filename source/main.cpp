@@ -4,6 +4,7 @@
 #include <cmath> // for abs()
 #include "crypto.h"
 #include "tadpole.h"
+#include "footer_adjust.h"
 
 #define WAITA() while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
 
@@ -68,13 +69,13 @@ void doStuff() {
 	u8 header_hash[0x20], srl_hash[0x20];
 
 	printf("Reading 484E4441.bin\n");
-	dsiware = readAllBytes("484E4441.bin", &dsiware_size);
+	dsiware = readAllBytes("/484E4441.bin", &dsiware_size);
 	printf("Reading ctcert.bin\n");
-	ctcert = readAllBytes("ctcert.bin", &ctcert_size);
+	ctcert = readAllBytes("/ctcert.bin", &ctcert_size);
 	printf("Reading flipnote srl.nds\n");
-	injection = readAllBytes("Ugoku Memo Chou (Japan).nds", &injection_size);
+	injection = readAllBytes("/srl.nds", &injection_size);
 	printf("Reading & parsing movable.sed\n");
-	movable = readAllBytes("movable.sed", &movable_size);
+	movable = readAllBytes("/movable.sed", &movable_size);
 
 	printf("Scrambling keys\n");
 	u8 normalKey[0x10], normalKey_CMAC[0x10];
@@ -98,7 +99,7 @@ void doStuff() {
 	placeSection((dsiware + 0x4020), header, 0xF0, normalKey, normalKey_CMAC);
 
 	printf("Calculating new header hash\n");
-	calculateSha256(header, 0xF0, header_hash);
+	FSUSER_UpdateSha256Context(header, 0xF0, header_hash);
 	delete[] header;
 
 	// === SRL.NDS ===
@@ -116,23 +117,23 @@ void doStuff() {
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
 
 	printf("Calculating new srl.nds hash\n");
-	calculateSha256(injection, injection_size, srl_hash);
+	FSUSER_UpdateSha256Context(injection, injection_size, srl_hash);
 
 	// === FOOTER ===
 	printf("Decrypting footer\n");
-	u8 *footer = new u8[0x4E0];
-	getSection((dsiware + 0x4130), 0x4E0, normalKey, footer);
+	footer_t *footer=(footer_t*)malloc(SIZE_FOOTER);
+	getSection((dsiware + 0x4130), 0x4E0, normalKey, (u8*)footer);
 
 	printf("Fixing hashes\n");
-	memcpy((footer + 0x20), header_hash, 0x20); //Fix the header hash
-	memcpy((footer + 0x60), srl_hash, 0x20);	//Fix the srl.nds hash
-	calculateSha256(footer, (13 * 0x20), (footer + (13 * 0x20))); //Fix the master hash
+	memcpy(footer->hdr_hash , header_hash, 0x20); //Fix the header hash
+	memcpy(footer->content_hash[0], srl_hash, 0x20);	//Fix the srl.nds hash
+	//calculateSha256((u8*)footer, (13 * 0x20), ((u8*)footer + (13 * 0x20))); //Fix the master hash
 
 	printf("Signing footer\n");
 	doSigning(ctcert, footer);
-
+	
 	printf("Placing back footer\n");
-	placeSection((dsiware + 0x4130), footer, 0x4E0, normalKey, normalKey_CMAC);
+	placeSection((dsiware + 0x4130), (u8*)footer, 0x4E0, normalKey, normalKey_CMAC);
 	delete[] footer;
 
 	writeAllBytes("484E4441.bin.patched", dsiware, dsiware_size);
