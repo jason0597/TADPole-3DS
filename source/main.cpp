@@ -1,64 +1,51 @@
 #include <3ds.h>
-#include <vector>
-#include <cstring> // for memcpy()
-#include <cmath> // for abs()
+#include <cstring>
+#include <string>
+#include <iostream>
 #include "crypto.h"
 #include "tadpole.h"
-#include "footer_adjust.h"
+#include "frogtool.h"
 
-#define WAITA() while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
+PrintConsole topScreen, bottomScreen;
+u8 flipnote_v0_hash[] = {0x7d, 0x22, 0xf4, 0x44, 0xeb, 0x35, 0x05, 0x46, 0x76, 0x9e, 0x38, 0x39, 0xa6, 0xb1, 0x21, 0xfc, 0xae, 0x65, 0xd0, 0x7c, 0x0e, 0xce, 0x67, 0xe9, 0x64, 0x07, 0x9b, 0xff, 0x52, 0xd5, 0x46, 0x1d};
 
-using std::array, std::vector;
+using std::cout, std::string;
 
-/*
+void error(string errormsg) {
+	consoleSelect(&bottomScreen);
+	cout << "\x1b[31m" << errormsg << "!\n" << "Press [START] to exit";
 
-DataHandling // handles reading from the files on the disk to the map
-Seedplanter  // it calls the relevant functions in order to:
-             // decrypt, inject srl.nds/public.sav, fix hashes, sign, and then re-encrypt
-TADPole// handles anything to do with the format of the dsiware itself, parsing the header
-             // basically it implements whatever functions Seedplanter calls & depends on
-Crypto       // handles raw crypto actions, generating CMAC, encrypt/decrypt, sign, etc.
-
-*/
-
-/*
-
-1) decrypt srl.nds section
-2) inject flipnote
-3) calculate the CMAC of the SHA256 of the new srl.nds and put it at the block metadata
-4) re-encrypt the srl.nds section
-5) decrypt footer.bin section
-6) fix the srl.nds hash, generate a new master hash, put it in the correct spot
-7) insert the CTCert/APCert stuff
-8) sign
-9) calculate the CMAC of the SHA256 of the new footer.bin and put it at the block metadata
-10) re-encrypt
-11) ...
-12) profit!
-
-*/
-
-u8 *readAllBytes(const char *filename, u32 *filelen) {
-	FILE *fileptr = fopen(filename, "rb");
-	if (fileptr == NULL) {
-		printf("!!! Failed to open %s !!!\n", filename);
-		WAITA();
-		exit(-1);
+	while (1) {
+		hidScanInput();
+		if (hidKeysDown() & KEY_START) break; 
+		gfxFlushBuffers();
+		gfxSwapBuffers();
+		gspWaitForVBlank();
 	}
+
+	exit(-1);
+}
+
+u8 *readAllBytes(string filename, u32 &filelen) {
+	FILE *fileptr = fopen(filename.c_str(), "rb");
+	if (fileptr == NULL) {
+		error("Failed to open " + filename);
+	}
+	
 	fseek(fileptr, 0, SEEK_END);
-	*filelen = ftell(fileptr);
+	filelen = ftell(fileptr);
 	rewind(fileptr);
 
-	u8 *buffer = (u8*)malloc(*filelen);
+	u8 *buffer = (u8*)malloc(filelen);
 
-	fread(buffer, *filelen, 1, fileptr);
+	fread(buffer, filelen, 1, fileptr);
 	fclose(fileptr);
 
 	return buffer;
 }
 
-void writeAllBytes(const char* filename, u8 *filedata, u32 filelen) {
-	FILE *fileptr = fopen(filename, "wb");
+void writeAllBytes(string filename, u8 *filedata, u32 filelen) {
+	FILE *fileptr = fopen(filename.c_str(), "wb");
 	fwrite(filedata, 1, filelen, fileptr);
 	fclose(fileptr);
 }
@@ -66,19 +53,32 @@ void writeAllBytes(const char* filename, u8 *filedata, u32 filelen) {
 void doStuff() {
 	u8 *dsiware, *ctcert, *injection, *movable;
 	u32 dsiware_size, ctcert_size, movable_size, injection_size;
-	u8 header_hash[0x20], srl_hash[0x20];
+	u8 header_hash[0x20] = {0}, srl_hash[0x20] = {0}, tmp_hash[0x20] = {0};
+	u8 normalKey[0x10] = {0}, normalKey_CMAC[0x10] = {0};
 
 	printf("Reading 484E4441.bin\n");
-	dsiware = readAllBytes("/484E4441.bin", &dsiware_size);
+	dsiware = readAllBytes("/484E4441.bin", dsiware_size);
+	if (dsiware_size != 454000) {
+		error("Provided DS Download Play is not 454000 bytes in size");
+	}
 	printf("Reading ctcert.bin\n");
-	ctcert = readAllBytes("/ctcert.bin", &ctcert_size);
+	ctcert = readAllBytes("/ctcert.bin", ctcert_size);
+	if (ctcert_size != 0x19E) {
+		error("Provided ctcert.bin is not 0x19E in size");
+	}
 	printf("Reading flipnote srl.nds\n");
-	injection = readAllBytes("/srl.nds", &injection_size);
+	injection = readAllBytes("/srl.nds", injection_size);
+	calculateSha256(injection, injection_size, tmp_hash);
+	if (memcmp(tmp_hash, flipnote_v0_hash, 0x20) != 0) {
+		error("Provided flipnote nds file's hash doesn't match");
+	}
 	printf("Reading & parsing movable.sed\n");
-	movable = readAllBytes("/movable.sed", &movable_size);
+	movable = readAllBytes("/movable.sed", movable_size);
+	if (movable_size != 320) {
+		error("Provided movable.sed is not 320 bytes of size");
+	}
 
 	printf("Scrambling keys\n");
-	u8 normalKey[0x10], normalKey_CMAC[0x10];
 	keyScrambler((movable + 0x110), false, normalKey);
 	keyScrambler((movable + 0x110), true, normalKey_CMAC);
 	
@@ -87,8 +87,8 @@ void doStuff() {
 	u8 *header = new u8[0xF0];
 	getSection((dsiware + 0x4020), 0xF0, normalKey, header);
 	
-	if (header[0] != 0x33 || header[1] != 0x46 || header[2] != 0x44 || header[3] != 0x54) {
-		printf("DECRYPTION FAILED!!!\n");
+	if (header[0] != '3' || header[1] != 'F' || header[2] != 'D' || header[3] != 'T') {
+		error("Decryption failed");
 	}
 
 	printf("Injecting new srl.nds size\n");
@@ -99,38 +99,40 @@ void doStuff() {
 	placeSection((dsiware + 0x4020), header, 0xF0, normalKey, normalKey_CMAC);
 
 	printf("Calculating new header hash\n");
-	FSUSER_UpdateSha256Context(header, 0xF0, header_hash);
+	calculateSha256(header, 0xF0, header_hash);
 	delete[] header;
 
 	// === SRL.NDS ===
 	// Basically, the srl.nds of DS Download play is right at the end of the TAD container
 	// Because we don't care about what it contains, we can overwrite it directly with our new
 	// flipnote srl.nds straight off the bat, without having to do any decryption
-	// We of course need to extend our vector of dsiwareBin by the necessary difference in bytes
-	// to accomodate the new flipnote srl.nds (which is 0x218800 in size!!)
+	// We of course need to extend our dsiware array by the necessary difference in bytes
+	// to accomodate the new flipnote srl.nds (which is 0x218800 in size)
 	printf("Resizing array\n");
 	printf("Old DSiWare size: %lX\n", dsiware_size);
-	dsiware_size += abs(0x69BC0 - injection_size); // new TAD size = old TAD size + abs(old srl size - new srl size)
+	dsiware_size += (injection_size - 0x69BC0);
 	printf("New DSiWare size: %lX\n", dsiware_size);
 	dsiware = (u8*)realloc(dsiware, dsiware_size);
 	printf("Placing back srl.nds\n");
 	placeSection((dsiware + 0x5190), injection, injection_size, normalKey, normalKey_CMAC);
 
 	printf("Calculating new srl.nds hash\n");
-	FSUSER_UpdateSha256Context(injection, injection_size, srl_hash);
+	calculateSha256(injection, injection_size, srl_hash);
 
 	// === FOOTER ===
 	printf("Decrypting footer\n");
-	footer_t *footer=(footer_t*)malloc(SIZE_FOOTER);
+	footer_t *footer = (footer_t*)malloc(SIZE_FOOTER);
 	getSection((dsiware + 0x4130), 0x4E0, normalKey, (u8*)footer);
 
 	printf("Fixing hashes\n");
 	memcpy(footer->hdr_hash , header_hash, 0x20); //Fix the header hash
 	memcpy(footer->content_hash[0], srl_hash, 0x20);	//Fix the srl.nds hash
-	//calculateSha256((u8*)footer, (13 * 0x20), ((u8*)footer + (13 * 0x20))); //Fix the master hash
 
 	printf("Signing footer\n");
-	doSigning(ctcert, footer);
+	Result res = doSigning(ctcert, footer);
+	if (res < 0) {
+		error("Signing failed");
+	}
 	
 	printf("Placing back footer\n");
 	placeSection((dsiware + 0x4130), (u8*)footer, 0x4E0, normalKey, normalKey_CMAC);
@@ -146,12 +148,30 @@ void doStuff() {
 
 int main() {
 	gfxInitDefault();
-	consoleInit(GFX_TOP, NULL);
+	consoleInit(GFX_TOP, &topScreen);
+	consoleInit(GFX_BOTTOM, &bottomScreen);
+	consoleSelect(&topScreen);
+	
+	AM_TWLPartitionInfo info;
+	Result res = nsInit();
+	printf("nsInit: %08X\n",(int)res);
+	res = amInit();
+	printf("amInit: %08X\n",(int)res);
+	res = romfsInit();
+	printf("romfsInit: %08X\n",(int)res);
+	res = AM_GetTWLPartitionInfo(&info);
+	printf("twlInfo: %08X\n\n",(int)res);
+
+	u8 *buf = new u8[0x20000];
 
 	printf("Press [A] to begin!\n\n");
-	WAITA();
+	while (1) {hidScanInput(); if (hidKeysDown() & KEY_A) { break; } }
 
+	export_tad(0x00048005484E4441, 5, buf, ".bin");
 	doStuff();
+	import_tad(0x00048005484E4441, 5, buf, ".bin.patched");
+
+	NS_RebootToTitle(0, 0x00048005484E4441);
 
 	printf("\nDone!");
 
@@ -161,7 +181,11 @@ int main() {
 		gfxFlushBuffers();
 		gfxSwapBuffers();
 		gspWaitForVBlank();
-	} gfxExit();
+	} 
+	
+	amExit();
+	nsExit();
+	gfxExit();
 	
 	return 0;
 }
